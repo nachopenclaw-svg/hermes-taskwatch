@@ -2,9 +2,38 @@
 
 **Keep unfinished agent commitments from disappearing between sessions.**
 
-Your agent says it will finish a report. The draft gets written, the session ends,
-and verification or delivery never happens. Hermes Closeout keeps that commitment
-in a durable ledger and brings it back through a bounded recovery workflow.
+Agent work can span multiple conversations, tool calls, and restarts. A draft gets
+written, a tool fails, or a task pauses for input. The conversation moves on, while
+the original commitment still has unfinished steps.
+
+Hermes Closeout gives those commitments a persistent record outside the current
+chat. It helps track situations such as:
+
+- **Work that looks finished but is not delivered:** a report exists, but still
+  needs verification or the final handoff to the user.
+- **Interrupted execution:** a tool failure or ended session leaves a task partly
+  complete, with a specific next step still outstanding.
+- **Waiting or blocked work:** a commitment depends on user input or an external
+  condition and needs review before anything resumes.
+- **Unreconciled completion:** the work is done, but its closeout issue still needs
+  to be updated and the remote result checked.
+
+The supplied capture instructions tell Hermes to record accepted, unfinished
+work with its owner, original source session, what remains, and the next action.
+That gives a later session a concrete starting point for checking the original
+request and continuing within its approved scope. Explicitly canceled, parked,
+or snoozed items stay out of recovery selection.
+
+When connected to your Hermes review job and Linear tools, the package plans
+needed issue updates and nominates at most one synchronized commitment for
+review. Hermes then verifies current authorization and task state before acting.
+If there is no pending sync or active recovery work, the preflight lets the
+scheduled job skip the model call.
+
+Capture depends on the agent following the supplied instructions; this release
+does not automatically discover forgotten promises by scanning old conversations.
+The repo provides the tracking code, an offline demo, and integration instructions
+for building that follow-through into your own setup.
 
 Built from a working Hermes commitment-tracking workflow.
 This is an independent community project, not an official Nous Research product.
