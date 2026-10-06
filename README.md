@@ -1,4 +1,4 @@
-# Hermes Closeout
+# Hermes TaskWatch
 
 **Keep unfinished agent commitments from disappearing between sessions.**
 
@@ -6,7 +6,7 @@ Agent work can span multiple conversations, tool calls, and restarts. A draft ge
 written, a tool fails, or a task pauses for input. The conversation moves on, while
 the original commitment still has unfinished steps.
 
-Hermes Closeout gives those commitments a persistent record outside the current
+Hermes TaskWatch gives those commitments a persistent record outside the current
 chat. It helps track situations such as:
 
 - **Work that looks finished but is not delivered:** a report exists, but still
@@ -132,6 +132,11 @@ retry history, authorization checks, and execution ownership are enforced by the
 integration workflow, not by a hidden background service.
 
 ## Development
+
+The project and repository are named **Hermes TaskWatch**. The Python distribution
+and command remain `hermes-closeout`, and the module remains `hermes_closeout`,
+so existing integrations keep working. Ledger formats, environment variables,
+and Linear identity markers are unchanged by the branding update.
 
 ```console
 python -m unittest discover -s tests -v

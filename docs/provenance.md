@@ -1,6 +1,6 @@
 # Provenance
 
-This project packages a custom commitment-tracking workflow
+Hermes TaskWatch packages a custom commitment-tracking workflow
 for Hermes Agent. The original components were a ledger manager, a combined
 morning preflight, and agent operating instructions. They are custom workflow
 code; this repo does not vendor the Hermes Agent runtime.
