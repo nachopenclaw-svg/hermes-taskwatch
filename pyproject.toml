@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-closeout"
+version = "0.1.0"
+description = "Persistent commitment tracking and recovery gates for Hermes Agent"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+hermes-closeout = "hermes_closeout.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["hermes_closeout*"]
