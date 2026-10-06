@@ -1,6 +1,7 @@
 # Verification
 
-Run `python -m unittest discover -s tests -v` and `python -m hermes_closeout.demo`.
+Run `python -m unittest discover -s tests -v`, `python -m hermes_closeout.demo`,
+and `python -m hermes_closeout.demo --linear`.
 Tests use temporary directories and fictional records. They never access live
 Hermes sessions, credentials, Linear, or your actual ledger.
 
@@ -8,7 +9,12 @@ The suite covers exact replay and immutable source identity; material revisions;
 terminal and snoozed exclusions; malformed and missing-state diagnostics; priority
 aging and the three-create plan cap; sync-before-recovery; one-item nomination;
 review-only waiting; stale and mismatched readbacks; issue rebinding/duplication;
-closure and return to silence; writer contention; atomic-replace failure; and the CLI/demo.
+closure and return to silence; writer contention; atomic-replace failure; and both demos.
+Local-mode checks cover target-free CLI capture/recovery/closeout, read-only
+preflight, status exclusions and review-only states, invalid state, and the example
+gate. Compatibility checks ensure linked ledgers and explicit invalid target
+configuration cannot silently fall back to local recovery. Linear plan/receipt
+commands still require a target.
 
 Each failure test asserts an observable result, including preservation of the
 previous bytes when a mutation is rejected. Remote receipt tests deliberately
@@ -19,4 +25,5 @@ GitHub Actions defines a Windows/Linux matrix on Python 3.11/3.14. Local checks
 on the author's current platform do not establish that the other matrix entries
 have passed. No live scheduler, Linear transport, model behavior evaluation, or
 unattended execution is covered by these deterministic tests. Validate the
-workflow in a dedicated test project before enabling recovery.
+workflow with a temporary ledger (and a dedicated test project for optional Linear)
+before enabling unattended recovery.

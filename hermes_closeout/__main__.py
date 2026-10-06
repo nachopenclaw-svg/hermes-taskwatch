@@ -11,7 +11,8 @@ from . import core
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Track unfinished Hermes commitments without model calls.")
     parser.add_argument("--ledger", type=Path, required=True)
-    parser.add_argument("--target", type=Path, help="Linear target JSON; required for planning and recovery")
+    parser.add_argument("--target", type=Path,
+                        help="Enable Linear sync with this target JSON; omit for local recovery. Required for plan/record-sync and linked ledgers.")
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("init", "list", "plan", "recovery", "preflight"):
         commands.add_parser(name)
@@ -28,10 +29,11 @@ def main(argv=None):
     try:
         target = None
         if args.command in {"plan", "recovery", "preflight", "record-sync"}:
-            if args.target is None:
+            if args.target is None and args.command in {"plan", "record-sync"}:
                 raise ValueError("--target is required")
-            target = json.loads(args.target.read_text(encoding="utf-8"))
-            core.validate_target(target)
+            if args.target is not None:
+                target = json.loads(args.target.read_text(encoding="utf-8"))
+                core.validate_target(target)
         if args.command == "init":
             result = core.initialize(args.ledger)
         elif args.command == "list":

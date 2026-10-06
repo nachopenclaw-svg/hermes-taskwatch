@@ -1,5 +1,30 @@
 # Local release validation — 2026-10-06
 
+## Local-first update — v0.2.0
+
+| Check | Result |
+|---|---|
+| Python 3.14.3, Windows unittest suite | 27 tests passed |
+| Local and simulated-Linear demos | Both passed from source and installed wheel |
+| Wheel build and isolated installation | Passed using build isolation |
+| Installed CLI and example gate outside checkout | Local empty/active flows and Linear sync gate passed |
+| Pre-change control | New local CLI test failed on v0.1.0 because target-free preflight returned an error; passes with this update |
+| Independent code, test, and prompt review | Accepted; no actionable findings |
+| Local Markdown links and diff whitespace | Passed |
+
+Schema version 1 and existing Linear command arguments are retained. Local mode
+does not fabricate sync receipts. Missing configuration on a linked ledger and
+explicit invalid target files still block recovery. The existing safeguards for
+identity, readback, cancellation, source authorization, and exclusive execution
+ownership remain in place.
+
+Live Hermes execution, optional Linear transport, unattended recovery, and model
+behavior evaluations were not run. The repository has no configured live model
+evaluation harness; prompt review was static. Remote CI results are recorded by
+GitHub Actions separately. No private production state or running schedule was changed.
+
+## Initial extraction — v0.1.0
+
 Scope: public extraction v0.1.0, local artifact only.
 
 | Check | Result |

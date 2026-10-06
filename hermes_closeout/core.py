@@ -287,9 +287,19 @@ def record_sync(path, target, receipt):
         return item
 
 
-def recovery(ledger, target, *, now=None):
+def _review_actions(ledger, target, *, now=None):
+    """Choose local review or optional Linear sync without dropping existing bindings."""
+    if target is not None:
+        return plan_sync(ledger, target, now=now)
+    validate(ledger)
+    if any(item["linear"]["issue_id"] is not None for item in ledger["candidates"]):
+        raise ValueError("a ledger linked to Linear requires its target configuration")
+    return {"create": [], "update": [], "close": []}
+
+
+def recovery(ledger, target=None, *, now=None):
     """Nominate at most one item; execution and live reconciliation are external."""
-    actions = plan_sync(ledger, target, now=now)
+    actions = _review_actions(ledger, target, now=now)
     if any(actions.values()):
         return {"candidate": None, "reason": "synchronize and read back outstanding actions first"}
     ready = [x for x in ledger["candidates"] if x["status"] in ACTIVE]
@@ -302,14 +312,15 @@ def recovery(ledger, target, *, now=None):
             "deferred_count": len(ready) - 1}
 
 
-def preflight(path, target, *, now=None):
+def preflight(path, target=None, *, now=None):
     try:
         ledger = load(path)
-        actions = plan_sync(ledger, target, now=now)
+        actions = _review_actions(ledger, target, now=now)
         selected = recovery(ledger, target, now=now)
     except (OSError, ValueError, TypeError, KeyError):
         return {"wakeAgent": True, "context": {"status": "error",
                 "error": "Closeout state or configuration could not be validated. Do not execute recovery."}}
     if not any(actions.values()) and selected["candidate"] is None:
         return {"wakeAgent": False}
-    return {"wakeAgent": True, "context": {"status": "ready", "actions": actions, "recovery": selected}}
+    return {"wakeAgent": True, "context": {"status": "ready", "mode": "local" if target is None else "linear",
+                                           "actions": actions, "recovery": selected}}

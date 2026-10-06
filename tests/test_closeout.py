@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -231,22 +232,137 @@ class CloseoutTests(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), before)
         self.assertEqual(list(self.path.parent.iterdir()), [self.path])
 
-    def test_cli_contract_and_missing_target_diagnostic(self):
+    def test_local_cli_capture_recovery_and_closeout_without_target(self):
         command = [sys.executable, "-m", "hermes_closeout", "--ledger", str(self.path)]
-        result = subprocess.run(command + ["preflight"], cwd=ROOT, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout)["context"]["status"], "error")
+
+        def invoke(*args):
+            result = subprocess.run(command + list(args), cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return json.loads(result.stdout)
+
+        self.assertEqual(invoke("preflight"), {"wakeAgent": False})
+        invoke("add", "--stable-id", "local:report", "--summary", "Deliver local report",
+               "--why-unresolved", "Delivery remains", "--next-action", "Verify and deliver",
+               "--owner", "test", "--source-session", "fictional-local-session")
+        before = self.path.read_bytes()
+        gate = invoke("preflight")
+        self.assertTrue(gate["wakeAgent"])
+        self.assertEqual(gate["context"]["mode"], "local")
+        self.assertEqual(gate["context"]["actions"], {"create": [], "update": [], "close": []})
+        selected = invoke("recovery")
+        self.assertEqual(selected["candidate"]["stable_id"], "local:report")
+        self.assertEqual(selected["candidate"]["source"]["session_id"], "fictional-local-session")
+        self.assertEqual(selected["mode"], "verify_authorization")
+        self.assertIsNone(selected["candidate"]["linear"]["issue_id"])
+        self.assertEqual(self.path.read_bytes(), before)
+        invoke("status", "--stable-id", "local:report", "--status", "resolved")
+        self.assertEqual(invoke("preflight"), {"wakeAgent": False})
+
+    def test_local_review_preserves_ranking_exclusions_and_review_only_states(self):
+        self.add("local:waiting", priority=1)
+        core.set_status(self.path, "local:waiting", "waiting")
+        self.add("local:blocked", priority=1)
+        core.set_status(self.path, "local:blocked", "blocked")
+        for status in ("resolved", "canceled", "parked", "snoozed"):
+            self.add("local:" + status, priority=1)
+            core.set_status(self.path, "local:" + status, status)
+        self.add("local:open", priority=4)
+        selected = core.recovery(core.load(self.path))
+        self.assertEqual(selected["candidate"]["stable_id"], "local:open")
+        self.assertEqual(selected["deferred_count"], 2)
+        core.set_status(self.path, "local:open", "resolved")
+        selected = core.recovery(core.load(self.path))
+        self.assertEqual(selected["candidate"]["stable_id"], "local:waiting")
+        self.assertEqual(selected["mode"], "review_only")
+        core.set_status(self.path, "local:waiting", "resolved")
+        selected = core.recovery(core.load(self.path))
+        self.assertEqual(selected["candidate"]["stable_id"], "local:blocked")
+        self.assertEqual(selected["mode"], "review_only")
+        core.set_status(self.path, "local:blocked", "resolved")
+        self.assertEqual(core.preflight(self.path), {"wakeAgent": False})
+
+    def test_local_review_validates_missing_and_corrupt_state(self):
+        for data in (b"private invalid json", b"[]", b'{"schema_version":99}'):
+            self.path.write_bytes(data)
+            result = core.preflight(self.path)
+            self.assertTrue(result["wakeAgent"])
+            self.assertEqual(result["context"]["status"], "error")
+            self.assertNotIn("private", json.dumps(result))
+            self.assertEqual(self.path.read_bytes(), data)
+        self.path.unlink()
+        self.assertEqual(core.preflight(self.path)["context"]["status"], "error")
+        self.assertFalse(self.path.exists())
+
+    def test_linked_ledger_never_silently_falls_back_to_local(self):
+        self.add()
+        core.record_sync(self.path, TARGET, self.receipt())
+        # Even closed/snoozed bindings must not be ignored when config is lost.
+        for status in ("open", "resolved", "canceled", "parked", "snoozed"):
+            core.set_status(self.path, "test:session:report", status)
+            before = self.path.read_bytes()
+            with self.subTest(status=status), self.assertRaisesRegex(ValueError, "linked to Linear"):
+                core.recovery(core.load(self.path))
+            self.assertEqual(core.preflight(self.path)["context"]["status"], "error")
+            self.assertEqual(self.path.read_bytes(), before)
+
+    def test_explicit_linear_cli_configuration_never_falls_back(self):
+        self.add()
+        command = [sys.executable, "-m", "hermes_closeout", "--ledger", str(self.path)]
         result = subprocess.run(command + ["--target", str(ROOT / "examples/linear-target.json"), "preflight"],
                                 cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout), {"wakeAgent": False})
+        context = json.loads(result.stdout)["context"]
+        self.assertEqual(context["mode"], "linear")
+        self.assertEqual(len(context["actions"]["create"]), 1)
+        self.assertIsNone(context["recovery"]["candidate"])
+        config = self.path.parent / "target.json"
+        for data in ("null", "{}", "invalid json"):
+            config.write_text(data, encoding="utf-8")
+            result = subprocess.run(command + ["--target", str(config), "preflight"],
+                                    cwd=ROOT, capture_output=True, text=True)
+            self.assertEqual(json.loads(result.stdout)["context"]["status"], "error")
+        config.unlink()
+        result = subprocess.run(command + ["--target", str(config), "preflight"],
+                                cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(json.loads(result.stdout)["context"]["status"], "error")
+        for args in (["plan"], ["record-sync", "--receipt", str(config)]):
+            result = subprocess.run(command + args, cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_example_gate_local_default_and_explicit_target_errors(self):
+        self.add()
+        env = {**os.environ, "HERMES_CLOSEOUT_LEDGER": str(self.path), "PYTHONPATH": str(ROOT)}
+        env.pop("HERMES_CLOSEOUT_TARGET", None)
+
+        def gate():
+            result = subprocess.run([sys.executable, str(ROOT / "examples/hermes_gate.py")],
+                                    cwd=self.path.parent, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return json.loads(result.stdout)
+
+        self.assertEqual(gate()["context"]["mode"], "local")
+        env["HERMES_CLOSEOUT_TARGET"] = str(ROOT / "examples/linear-target.json")
+        self.assertIsNone(gate()["context"]["recovery"]["candidate"])
+        config = self.path.parent / "target.json"
+        config.write_text("null", encoding="utf-8")
+        for target in ("", "relative.json", str(config), str(self.path.parent / "missing.json")):
+            env["HERMES_CLOSEOUT_TARGET"] = target
+            self.assertEqual(gate()["context"]["status"], "error")
+        env.pop("HERMES_CLOSEOUT_TARGET")
+        core.record_sync(self.path, TARGET, self.receipt())
+        self.assertEqual(gate()["context"]["status"], "error")
 
     def test_offline_demo_runs_end_to_end(self):
-        result = subprocess.run([sys.executable, "-m", "hermes_closeout.demo"], cwd=ROOT,
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('5. Verified closeout recorded: {"wakeAgent": false}', result.stdout)
-        self.assertIn("simulating an external readback", result.stdout)
+        for args in ([], ["--linear"]):
+            result = subprocess.run([sys.executable, "-m", "hermes_closeout.demo"] + args, cwd=ROOT,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('5. Demo closeout recorded: {"wakeAgent": false}', result.stdout)
+            if args:
+                self.assertIn("simulating an external readback", result.stdout)
+            else:
+                self.assertIn("no external tracker or sync receipt required", result.stdout)
+                self.assertNotIn("simulating an external readback", result.stdout)
 
 
 if __name__ == "__main__":

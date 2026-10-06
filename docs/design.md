@@ -2,7 +2,7 @@
 
 ## Separation of responsibilities
 
-The JSON ledger owns commitment state. Linear is an external projection. The
+The JSON ledger owns commitment state. Linear is an optional external projection. The
 Python package plans and validates; Hermes retrieves source authorization and
 performs work. Nothing in a generated plan or issue grants permission to act.
 
@@ -24,7 +24,7 @@ Schema version 1 contains `updated_at` and a `candidates` array. Each candidate 
 | `priority` | Integer 1 (urgent) through 4 (low) |
 | `revision` | Increments on a material capture or status change |
 | `first_seen_at`, `last_changed_at` | Timezone-aware ISO timestamps |
-| `linear` | Issue identity, exact target binding, acknowledged revision/status/time |
+| `linear` | Optional integration metadata: issue identity, exact target binding, acknowledged revision/status/time; unbound defaults remain in local records for schema compatibility |
 
 Only explicit `status` changes reopen terminal items. Snoozing has no implicit
 expiry. An unsynced terminal item produces no remote create; a previously synced
@@ -78,10 +78,24 @@ Missing or malformed state produces a bounded diagnostic wake; it never fabricat
 an empty ledger. Waiting/blocked work can still wake the agent for review; suppressing
 unchanged notifications is the agent workflow's responsibility.
 
-Any outstanding sync action blocks recovery nomination. Once reconciled, the
-selector nominates at most one item. That is a nomination, not a claim, lease,
-authorization, or executed action. A live agent must reconcile source consent,
-current issue state, latest revision, and exclusive execution ownership again.
+Without a target, `recovery(ledger)` and `preflight(path)` run locally after
+validating the ledger. They produce no sync actions and need no remote receipt.
+With a target, any outstanding sync action blocks recovery nomination. Existing
+positional target arguments retain their behavior; an invalid non-null target
+never falls back to local mode. CLI and gate configuration also reject an explicitly
+configured JSON null. Ready preflight context reports `mode: local` or `mode: linear`.
+
+If any candidate has a recorded Linear issue ID, target-free review is rejected,
+even for a terminal or snoozed candidate. This prevents lost configuration from
+silently bypassing remote reconciliation. Enabling Linear for an unbound local
+ledger requires sync before recovery. There is no automatic detach or migration
+off Linear; use a separate ledger for new local-only work. Schema version 1 and
+its `linear` fields are unchanged, and read-only mode selection never rewrites them.
+
+In either mode, the selector nominates at most one item. That is a nomination,
+not a claim, lease, authorization, or executed action. A live agent must reconcile
+source consent, latest revision/status, and exclusive execution ownership again;
+Linear mode also requires checking current issue state.
 
 Attempts and their evidence stay in the canonical task checkpoint referenced by
 the candidate. This release does not introduce a second attempt database or

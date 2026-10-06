@@ -22,3 +22,4 @@ jobs:
         run: |
           hermes-closeout --help
           python -m hermes_closeout.demo
+          python -m hermes_closeout.demo --linear

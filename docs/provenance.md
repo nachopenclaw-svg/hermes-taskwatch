@@ -14,6 +14,10 @@ Public extraction changes: explicit paths and target settings; required immutabl
 source/owner identity; stricter input and receipt validation; local writer locking;
 explicit initialization; sync-before-recovery; and offline examples/tests.
 
+Version 0.2.0 adds local-only recovery as the default. Linear remains optional;
+sync-before-recovery still applies whenever it is enabled. Existing issue bindings
+cannot be silently bypassed by removing the target configuration.
+
 No production ledger, conversation transcript, account identifier, credential,
 private issue link, machine path, or business record is part of the intended
 distribution. Example identities are fictional. Existing private ledger files
