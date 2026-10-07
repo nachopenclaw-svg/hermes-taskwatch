@@ -16,6 +16,12 @@ gate. Compatibility checks ensure linked ledgers and explicit invalid target
 configuration cannot silently fall back to local recovery. Linear plan/receipt
 commands still require a target.
 
+Sync-status regression checks exercise six unsynchronized creates through the
+CLI, preflight, and recovery: six total, three planned, three deferred, with exact
+IDs and unchanged ledger bytes. Mixed-action checks distinguish new issues,
+updates, and closures; exclude acknowledged, unbound terminal, and snoozed work;
+and retain target-binding rejection. These do not test live label scope.
+
 Each failure test asserts an observable result, including preservation of the
 previous bytes when a mutation is rejected. Remote receipt tests deliberately
 mutate identity or managed fields to exercise rejection. Demo receipts are

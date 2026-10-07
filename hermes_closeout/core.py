@@ -234,8 +234,8 @@ def _action(item, target):
                         "priority": item["priority"], "state": state}}
 
 
-def plan_sync(ledger, target, *, now=None):
-    """Read-only plan; up to three creates per invocation, not a daily quota."""
+def _pending_sync(ledger, target, *, now=None):
+    """All pending actions before the per-plan create cap."""
     validate(ledger)
     target = canonical_target(target)
     now = now or now_utc()
@@ -253,8 +253,27 @@ def plan_sync(ledger, target, *, now=None):
             continue
         action = _action(item, target)
         actions[action["action"]].append(action)
+    return actions
+
+
+def plan_sync(ledger, target, *, now=None):
+    """Read-only plan; up to three creates per invocation, not a daily quota."""
+    actions = _pending_sync(ledger, target, now=now)
     actions["create"] = actions["create"][:3]
     return actions
+
+
+def sync_status(ledger, target, *, now=None):
+    """Count pending local acknowledgments, not remote failures or permissions."""
+    actions = _pending_sync(ledger, target, now=now)
+    pending_ids = [action["stable_id"] for kind in ("create", "update", "close")
+                   for action in actions[kind]]
+    deferred_ids = [action["stable_id"] for action in actions["create"][3:]]
+    return {"pending_count": len(pending_ids), "pending_ids": pending_ids,
+            "create_count": len(actions["create"]), "update_count": len(actions["update"]),
+            "close_count": len(actions["close"]),
+            "planned_create_count": min(3, len(actions["create"])),
+            "deferred_create_count": len(deferred_ids), "deferred_create_ids": deferred_ids}
 
 
 def record_sync(path, target, receipt):
@@ -301,7 +320,8 @@ def recovery(ledger, target=None, *, now=None):
     """Nominate at most one item; execution and live reconciliation are external."""
     actions = _review_actions(ledger, target, now=now)
     if any(actions.values()):
-        return {"candidate": None, "reason": "synchronize and read back outstanding actions first"}
+        return {"candidate": None, "reason": "synchronize and read back outstanding actions first",
+                "sync_status": sync_status(ledger, target, now=now)}
     ready = [x for x in ledger["candidates"] if x["status"] in ACTIVE]
     ranks = {"open": 0, "waiting": 1, "blocked": 2}
     ready.sort(key=lambda x: (ranks[x["status"]], *_rank(x, now or now_utc())))
@@ -322,5 +342,8 @@ def preflight(path, target=None, *, now=None):
                 "error": "Closeout state or configuration could not be validated. Do not execute recovery."}}
     if not any(actions.values()) and selected["candidate"] is None:
         return {"wakeAgent": False}
-    return {"wakeAgent": True, "context": {"status": "ready", "mode": "local" if target is None else "linear",
-                                           "actions": actions, "recovery": selected}}
+    context = {"status": "ready", "mode": "local" if target is None else "linear",
+               "actions": actions, "recovery": selected}
+    if target is not None:
+        context["sync_status"] = sync_status(ledger, target, now=now)
+    return {"wakeAgent": True, "context": context}

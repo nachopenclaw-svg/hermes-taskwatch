@@ -19,12 +19,38 @@ In local mode, skip `plan` and `record-sync` entirely; do not fabricate remote
 receipts or create tracker issues. The local ledger is the commitment record.
 Do not switch a Linear job to local mode to evade a configuration or sync error.
 
-In Linear mode, first run `plan`. Use the exact identity and readback procedure documented in
-docs/hermes-integration.md (copy that procedure into this job's available context).
+In Linear mode, first run `plan`, then verify the destination with the same live
+Linear connection before any issue writes. Resolve the exact team and project;
+verify every required issue label is active, assignable, and available to that
+team (workspace-wide, team-owned, or verified inherited). Check all lookup pages
+and label-group compatibility. A same-named label in another team is insufficient;
+use canonical IDs and never substitute an ambiguous name. If the connection
+cannot establish scope or availability, stop before writes. The offline plan
+does not check these remote facts.
+
+Use the destination validation, exact identity, and readback procedures documented
+in docs/hermes-integration.md (copy them into this job's available context).
 Process only the first plan's bounded create batch plus its updates and closures.
 Search all marker pages, refuse duplicates or ownership drift, read back each
 write, and acknowledge it with `record-sync`. If any verification fails, stop
 recovery and report the exact reconciliation blocker.
+
+Stop the batch on the first shared configuration error; do not repeat the same
+invalid request on the remaining candidates. Preserve pending work. Do not create
+diagnostic issues or change labels, teams, access, or target bindings unless that
+specific repair is already authorized. A missing/unavailable label does not prove
+an access problem: check team scope, archive state, and lookup completeness first.
+Only diagnose permissions from explicit evidence; otherwise state the uncertainty.
+Do not silently remove required labels or switch to local mode to bypass a block.
+
+After a batch or failure, run `sync-status` against fresh state. Use its
+`pending_count` and `pending_ids` for the full unsynchronized queue, including
+creates deferred by the cap. Six pending creates means six total, three planned,
+three deferred. Deferred candidates are not necessarily previous failures. Report
+attempts and outcomes separately from this local queue state using actual tool
+results; a missing local receipt does not prove no remote issue exists. Reconcile
+unknown write outcomes by exact marker/issue ID. Make every count agree with its
+unique ID list; never add overlapping snapshots or infer counts from prose.
 
 Then run `recovery` again against fresh state. If there is no candidate, stop.
 If outstanding synchronization remains after the bounded batch, leave it for

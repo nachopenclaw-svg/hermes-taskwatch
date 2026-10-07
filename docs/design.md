@@ -59,6 +59,20 @@ Markers use SHA-256 of the stable ID under the `hermes-closeout-id` namespace.
 The adapter must search all remote pages for this exact marker before creating.
 The package cannot see search results and cannot guarantee remote uniqueness.
 
+Before remote writes, the adapter must verify the destination project and issue
+labels through its live connection, including each label's applicability to the
+destination team. Offline target validation checks shape and exact identity only;
+it cannot discover missing, archived, or wrong-team labels, or diagnose access.
+The integration instructions require stopping on a shared configuration failure
+and preserving pending work instead of repeating invalid creates.
+
+`sync_status` (CLI `sync-status`) reports the complete pending ID set and action
+counts before the three-create plan cap, plus deferred create IDs/counts. The
+`plan` result remains the same three action arrays. Linear preflight context and
+blocked recovery add `sync_status`; local-mode output is unchanged. Counts are
+derived from the same validated snapshot and pending-action rules. They describe
+missing local acknowledgments, not remote issue absence, attempts, or failures.
+
 `record-sync` accepts a normalized readback from a trusted adapter. It checks the
 current revision, all managed fields, original issue identity, target binding,
 and that the same issue has not been assigned to another candidate. It does not

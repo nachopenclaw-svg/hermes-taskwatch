@@ -117,6 +117,60 @@ class CloseoutTests(unittest.TestCase):
         self.assertIsNone(core.recovery(core.load(self.path), TARGET)["candidate"])
         self.assertTrue(core.preflight(self.path, TARGET)["wakeAgent"])
 
+    def test_sync_status_counts_all_six_pending_not_only_three_planned(self):
+        ids = [f"test:item:{n}" for n in range(6)]
+        for sid in ids:
+            self.add(sid)
+        before = self.path.read_bytes()
+        expected = {
+            "pending_count": 6, "pending_ids": ids,
+            "create_count": 6, "update_count": 0, "close_count": 0,
+            "planned_create_count": 3, "deferred_create_count": 3,
+            "deferred_create_ids": ids[3:],
+        }
+        context = core.preflight(self.path, TARGET)["context"]
+        self.assertEqual(context["sync_status"], expected)
+        self.assertEqual(len(context["actions"]["create"]), 3)
+        self.assertIsNone(context["recovery"]["candidate"])
+        self.assertEqual(context["recovery"]["sync_status"], expected)
+        target_path = self.path.parent / "target.json"
+        target_path.write_text(json.dumps(TARGET), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-m", "hermes_closeout", "--ledger", str(self.path),
+             "--target", str(target_path), "sync-status"],
+            cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), expected)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_sync_status_distinguishes_pending_updates_closures_and_exclusions(self):
+        for sid in ("test:update", "test:close", "test:clean", "test:snoozed"):
+            self.add(sid)
+            core.record_sync(self.path, TARGET, self.receipt(sid))
+        self.add("test:update", next_action="Deliver corrected report")
+        core.set_status(self.path, "test:close", "resolved")
+        core.set_status(self.path, "test:snoozed", "snoozed")
+        for status in ("resolved", "canceled", "parked", "snoozed"):
+            sid = "test:unbound:" + status
+            self.add(sid)
+            core.set_status(self.path, sid, status)
+        self.add("test:new")
+        before = self.path.read_bytes()
+        status = core.sync_status(core.load(self.path), TARGET)
+        self.assertEqual(status, {
+            "pending_count": 3, "pending_ids": ["test:new", "test:update", "test:close"],
+            "create_count": 1, "update_count": 1, "close_count": 1,
+            "planned_create_count": 1, "deferred_create_count": 0,
+            "deferred_create_ids": [],
+        })
+        self.assertEqual(self.path.read_bytes(), before)
+        for sid, kind in (("test:new", "create"), ("test:update", "update"), ("test:close", "close")):
+            core.record_sync(self.path, TARGET, self.receipt(sid, kind))
+        self.assertEqual(core.sync_status(core.load(self.path), TARGET)["pending_count"], 0)
+        with self.assertRaisesRegex(ValueError, "target differs"):
+            core.sync_status(core.load(self.path), {**TARGET, "team": "OTHER"})
+
+
     def test_planned_payload_preserves_independently_specified_managed_fields(self):
         self.add()
         action = core.plan_sync(core.load(self.path), TARGET)["create"][0]

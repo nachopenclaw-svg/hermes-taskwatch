@@ -12,9 +12,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Track unfinished Hermes commitments without model calls.")
     parser.add_argument("--ledger", type=Path, required=True)
     parser.add_argument("--target", type=Path,
-                        help="Enable Linear sync with this target JSON; omit for local recovery. Required for plan/record-sync and linked ledgers.")
+                        help="Enable Linear sync with this target JSON; omit for local recovery. Required for plan/sync-status/record-sync and linked ledgers.")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "list", "plan", "recovery", "preflight"):
+    for name in ("init", "list", "plan", "sync-status", "recovery", "preflight"):
         commands.add_parser(name)
     add = commands.add_parser("add")
     for name in ("stable-id", "summary", "why-unresolved", "next-action", "owner", "source-session"):
@@ -28,8 +28,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         target = None
-        if args.command in {"plan", "recovery", "preflight", "record-sync"}:
-            if args.target is None and args.command in {"plan", "record-sync"}:
+        if args.command in {"plan", "sync-status", "recovery", "preflight", "record-sync"}:
+            if args.target is None and args.command in {"plan", "sync-status", "record-sync"}:
                 raise ValueError("--target is required")
             if args.target is not None:
                 target = json.loads(args.target.read_text(encoding="utf-8"))
@@ -47,6 +47,8 @@ def main(argv=None):
             result = core.record_sync(args.ledger, target, json.loads(args.receipt.read_text(encoding="utf-8")))
         elif args.command == "plan":
             result = core.plan_sync(core.load(args.ledger), target)
+        elif args.command == "sync-status":
+            result = core.sync_status(core.load(args.ledger), target)
         elif args.command == "recovery":
             result = core.recovery(core.load(args.ledger), target)
         else:

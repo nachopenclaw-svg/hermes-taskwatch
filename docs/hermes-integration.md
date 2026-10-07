@@ -53,7 +53,53 @@ The planner treats these as opaque, exact values and does not resolve names.
 Keep account credentials in your existing Linear tool configuration; this package
 neither reads nor stores credentials.
 
-Pass `--target ABSOLUTE_TARGET_PATH` to `plan`, `record-sync`, `preflight`, and
+### Verify the destination before any sync writes
+
+During setup and before each batch, use the **same Linear connection the scheduled
+job will use** to perform these read-only checks:
+
+1. Resolve the exact destination team and project. Confirm that the project is
+   available to that team. A project name or a label found elsewhere in the
+   workspace does not establish that this destination can use it.
+2. Resolve every required **issue label** to its canonical ID and verify that it
+   is available to issues in the destination team. Workspace labels apply across
+   teams; team labels must belong to the destination team or be explicitly
+   verified as inherited by it. A same-named label in an unrelated team is not
+   a substitute. Read all result pages; if scope or completeness is unknown, stop.
+3. Confirm that each label is active and assignable, not an archived label or a
+   label-group heading. Check that the required set has no conflicting members
+   of the same label group. Use IDs whenever supported by the tools; if a tool
+   only accepts names, require unambiguous resolution within this destination.
+4. Check that the adapter can map the planned issue states to this team's
+   workflow and normalize readback consistently. Save the verified target in
+   the private configuration. Never copy demo identifiers into a live target.
+
+`followup-escalation` and `agent:demo` are example label names, **not built-in
+requirements**. Choose your own ownership labels. The repo neither creates labels
+nor grants access. See [Linear's label scope documentation](https://linear.app/docs/labels).
+
+If a required label is absent or applies only to another team, stop before issue
+writes and report a target-configuration blocker. Creating it in the destination
+team (or selecting an appropriate existing label) is a separate authorized setup
+change. Do not move the other team's label, drop required labels, switch teams, or
+disable Linear to work around the error. Existing recorded target bindings cannot
+be changed just by editing this config; do not erase them to force a new target.
+
+An empty lookup or "label unavailable" error alone is **not evidence of a
+permission problem**. Distinguish a confirmed scope mismatch, a missing or
+archived label, an incomplete lookup, and an explicit authorization denial. If
+the connection cannot expose enough metadata, report what could not be verified
+and request that specific check; do not assert that broader access is needed.
+Successful generic issue creation does not prove that required labels will work.
+
+These are live adapter obligations. The package's offline `validate_target`
+checks only shape and exact values; successful `plan` or `preflight` output does
+not validate remote label availability or permissions. Recheck after any config
+or connection change and stop on a new remote error even after a successful check.
+
+### Apply and acknowledge one bounded batch
+
+Pass `--target ABSOLUTE_TARGET_PATH` to `plan`, `sync-status`, `record-sync`, `preflight`, and
 `recovery`. Supplying a target enables Linear mode; all sync safeguards remain.
 An explicitly configured missing, malformed, or null target produces an error,
 never a fallback to local mode. Active local commitments will require synchronization
@@ -86,6 +132,13 @@ For each planned action:
    local revision changed during the remote call, obtain a fresh plan and
    reconcile the same remote issue before continuing.
 
+On the first shared setup failure (such as an inapplicable required label), stop
+the batch instead of retrying the same invalid payload on the other candidates.
+Preserve every pending record, stop recovery, and record the actual attempted,
+successful, failed, and unattempted actions. A timeout can leave the remote outcome
+unknown: reconcile by exact marker/issue ID before retrying; do not claim nothing
+was created without checking. Do not create a troubleshooting issue as a probe.
+
 Receipt shape (all values must come from the current action and fresh readback):
 
 ```json
@@ -113,6 +166,23 @@ managed set. Payload fields must match exactly, including description whitespace
 Each plan contains at most three creates. This is a **per-plan cap**, not a daily
 quota. Run one scheduled batch if you want the original bounded morning cadence.
 Repeated plans can nominate another batch after successful sync.
+
+### Report the full queue without guessing
+
+Run the read-only `sync-status` command with the same ledger and target after
+the batch or a failure. It reports `pending_count` and `pending_ids` across all
+unsynchronized creates, updates, and closures, before the three-create cap.
+`planned_create_count` is the next plan's bounded create count;
+`deferred_create_count` and `deferred_create_ids` are the additional creates.
+Linear preflight and blocked recovery also include `sync_status`.
+
+For six pending new candidates, the result is six pending, three planned creates,
+and three deferred creates. Deferred does not mean previously attempted or failed.
+These fields describe **local acknowledgments**, not proof of remote absence or
+failure. Use actual tool outcomes for attempt counts and actual readback for
+remote claims. Recompute after writes; do not add an old gate count to a new list.
+Every reported count must match its exact unique ID list. Keep unchanged blockers
+quiet according to the existing notification policy.
 
 ## 4. Wire the morning gate
 
@@ -153,7 +223,11 @@ capture → nomination → authorized completion → local resolution cycle. For
 also use a dedicated test project and verify sync, readback, and remote closure.
 Then check replay, cancellation, changed revision, malformed state, and an empty
 morning. In Linear mode also check duplicate remote markers and missing target
-configuration. Confirm the schedule's delivery behavior
+configuration. Verify that a required label available only to an unrelated team
+blocks the adapter before writes, that a missing label is not reported as a proven
+permission problem, and that six pending creates are reported as six total with
+only three selected for the batch. Use a deliberate invalid test target for the
+negative check; do not alter shared labels. Confirm the schedule's delivery behavior
 and source lookup, rather than relying only on a successful command exit.
 
 Do not import a private production ledger as test data. Existing private ledgers

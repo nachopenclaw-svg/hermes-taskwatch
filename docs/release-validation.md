@@ -1,6 +1,33 @@
-# Local release validation — 2026-10-06
+# Local release validation
 
-## Local-first update — v0.2.0
+## Linear setup and queue reporting — v0.2.1 — 2026-10-07
+
+| Check | Result |
+|---|---|
+| Python 3.14.3, Windows unittest suite | 29 tests passed |
+| Local and simulated-Linear demos | Passed from source and installed wheel |
+| Wheel build and isolated installation outside checkout | Passed; package metadata and module version are 0.2.1 |
+| Installed CLI, six-item status and preflight | Six pending, three planned creates, three deferred; recovery blocked; local mode unchanged |
+| Pre-change control | Two new reporting tests failed because v0.2.0 exposed no full-queue summary; passed after implementation |
+| Independent code, test, and workflow review | Accepted; no actionable findings |
+| Local Markdown links and diff whitespace | Passed |
+
+The target format, ledger schema, and capped `plan` arrays are unchanged. The new
+read-only `sync-status` command and additive Linear preflight/recovery fields
+count outstanding local acknowledgments; they cannot prove remote absence or
+classify remote failures. A stale module version constant was aligned with the
+distribution version.
+
+The installer guide and morning prompt now require live destination-team label
+checks before writes, evidence-based diagnosis, and stopping on shared setup
+failures. This is an adapter workflow requirement, not a new automatic remote
+validator. Static scenario review covered wrong-team and unknown labels, batch
+stops, uncertain write outcomes, and six-item reporting. Live Hermes/Linear and
+model behavior evaluations were not run; no model evaluation harness is configured.
+The author’s live labels, ledger, and job were not changed. Remote CI is recorded
+separately by GitHub Actions.
+
+## Local-first update — v0.2.0 — 2026-10-06
 
 | Check | Result |
 |---|---|

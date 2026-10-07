@@ -127,8 +127,16 @@ python -m hermes_closeout --ledger state/closeout.json --target examples/linear-
 `examples/linear-target.json` is fictional. For real use, copy it to
 `local/linear-target.json` and supply your team's, project's, and labels' canonical
 identifiers as described in [Hermes integration](docs/hermes-integration.md).
+Before any live batch, that guide requires checking that the project and every
+required issue label are available to the destination team through the job's
+actual Linear connection. A label with the same name in another team is not
+enough. The offline planner cannot check remote scope or permissions.
 The same ledger can start locally and later use Linear; existing active items
 will then require sync and readback before recovery.
+
+Use `sync-status` with the same ledger and target to report all pending sync IDs
+and counts, including creates deferred by the three-item plan cap. These are local
+acknowledgment counts, not evidence that an issue is absent from Linear.
 
 Existing Linear commands and schedules keep working with their target configured.
 A ledger with any recorded Linear issue refuses target-free recovery, even when
